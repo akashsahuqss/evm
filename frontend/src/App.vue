@@ -96,21 +96,16 @@ n<template>
               </li>
             </ul>
           </div>
+
+          <button @click="fetchDeployedTokens" :disabled="loading" class="action-btn">
+            {{ loading ? 'Fetching...' : 'List All Deployed Tokens' }}
+          </button>
         </div>
 
         <!-- Token Transfer Section -->
         <div class="feature-section">
           <h3>Transfer Tokens</h3>
-          <div class="form-group">
-            <label for="recipient">Recipient Address:</label>
-            <input
-              id="recipient"
-              v-model="recipient"
-              type="text"
-              placeholder="0x..."
-            >
-          </div>
-
+          <p class="info-text">Note: This transfers tokens from the contract owner to your wallet. Use this to get initial tokens for testing.</p>
           <div class="form-group">
             <label for="amount">Amount (Tokens):</label>
             <input
@@ -122,8 +117,8 @@ n<template>
             >
           </div>
 
-          <button @click="transferTokens" :disabled="loading" class="transfer-btn">
-            {{ loading ? 'Transferring...' : 'Transfer Tokens' }}
+          <button @click="transferTokensToUser" :disabled="loading" class="transfer-btn">
+            {{ loading ? 'Transferring...' : 'Get Tokens' }}
           </button>
         </div>
 
@@ -251,6 +246,9 @@ export default {
             this.showStatus('Warning: Contract not loaded, but you can still connect to MetaMask.', 'info')
           }
 
+          // Fetch deployed tokens list
+          await this.fetchDeployedTokens()
+
           this.showStatus(`Connected to MetaMask: ${this.walletAddress}`, 'success')
         } catch (error) {
           this.showStatus(`Error connecting to MetaMask: ${error.message}`, 'error')
@@ -370,22 +368,7 @@ export default {
       }
     },
 
-    async transferTokens() {
-      if (!this.contract) {
-        // Try to load contract again
-        this.showStatus('Loading contract...', 'info')
-        const contractLoaded = await this.loadContract()
-        if (!contractLoaded) {
-          this.showStatus('Contract not available. Please check your network connection.', 'error')
-          return
-        }
-      }
-
-      if (!ethers.utils.isAddress(this.recipient)) {
-        this.showStatus('Invalid recipient address.', 'error')
-        return
-      }
-
+    async transferTokensToUser() {
       if (parseFloat(this.amount) <= 0) {
         this.showStatus('Amount must be positive.', 'error')
         return
@@ -394,21 +377,45 @@ export default {
       this.loading = true
 
       try {
-        this.showStatus(`Transferring ${this.amount} tokens to ${this.recipient}...`, 'info')
+        this.showStatus(`Getting ${this.amount} tokens...`, 'info')
 
-        // Call the secureTransfer function on the contract
-        const tx = await this.contract.secureTransfer(
-          this.recipient,
-          ethers.utils.parseEther(this.amount)
-        )
+        const response = await fetch('http://localhost:3005/api/transfer-to-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userAddress: this.walletAddress,
+            amount: this.amount
+          })
+        })
 
-        this.showStatus(`Transaction sent! Hash: ${tx.hash}`, 'success')
-        console.log("Transaction hash:", tx.hash)
-
-        await tx.wait()
-        this.showStatus('Token transfer successful!', 'success')
+        const data = await response.json()
+        if (response.ok) {
+          this.showStatus(`Tokens transferred successfully! Tx: ${data.txHash}`, 'success')
+        } else {
+          this.showStatus(`Failed to transfer tokens: ${data.error}`, 'error')
+        }
       } catch (error) {
-        this.showStatus(`Token transfer failed: ${error.message}`, 'error')
+        this.showStatus(`Error transferring tokens: ${error.message}`, 'error')
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchDeployedTokens() {
+      this.loading = true
+      try {
+        const response = await fetch('http://localhost:3005/api/deployed-tokens')
+        const data = await response.json()
+        if (response.ok) {
+          this.deployedTokens = data.tokens
+          this.showStatus('Deployed tokens fetched successfully!', 'success')
+        } else {
+          this.showStatus(`Failed to fetch tokens: ${data.error}`, 'error')
+        }
+      } catch (error) {
+        this.showStatus(`Error fetching tokens: ${error.message}`, 'error')
       } finally {
         this.loading = false
       }
@@ -420,6 +427,11 @@ export default {
         return
       }
 
+      if (!this.walletAddress) {
+        this.showStatus('Please connect your MetaMask wallet first.', 'error')
+        return
+      }
+
       this.loading = true
 
       try {
@@ -427,7 +439,8 @@ export default {
 
         const response = await axios.post('http://localhost:3005/api/nowpayments/create-payment', {
           amount: this.payAmount,
-          currency: this.payCurrency
+          currency: this.payCurrency,
+          walletAddress: this.walletAddress
         })
 
         if (response.status === 200) {

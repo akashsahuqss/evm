@@ -6,7 +6,7 @@ class NowPaymentsService {
     this.baseUrl = 'https://api.nowpayments.io/v1';
   }
 
-  async createPayment(amount, currency) {
+  async createPayment(amount, currency, walletAddress) {
     try {
       const response = await axios.post(`${this.baseUrl}/invoice`, {
         price_amount: amount,
@@ -14,7 +14,8 @@ class NowPaymentsService {
         pay_currency: currency,
         ipn_callback_url: `${process.env.BASE_URL || 'http://localhost:3005'}/api/nowpayments/ipn`,
         success_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/success`,
-        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/cancel`
+        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/cancel`,
+        order_description: `Payment to ${walletAddress}`
       }, {
         headers: {
           'x-api-key': this.apiKey,
@@ -28,7 +29,8 @@ class NowPaymentsService {
         paymentUrl: response.data.invoice_url,
         payAddress: response.data.pay_address,
         payAmount: response.data.pay_amount,
-        payCurrency: response.data.pay_currency
+        payCurrency: response.data.pay_currency,
+        walletAddress: walletAddress
       };
     } catch (error) {
       console.error('NowPayments API error:', error.response?.data || error.message);

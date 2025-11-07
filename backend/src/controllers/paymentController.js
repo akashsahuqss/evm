@@ -3,12 +3,12 @@ const nowPaymentsService = require('../services/nowpayments');
 class PaymentController {
   async createPayment(req, res) {
     try {
-      const { amount, currency } = req.body;
+      const { amount, currency, walletAddress } = req.body;
 
-      if (!amount || !currency) {
+      if (!amount || !currency || !walletAddress) {
         return res.status(400).json({
           success: false,
-          error: 'Amount and currency are required'
+          error: 'Amount, currency, and wallet address are required'
         });
       }
 
@@ -27,7 +27,7 @@ class PaymentController {
         });
       }
 
-      const result = await nowPaymentsService.createPayment(amount, currency);
+      const result = await nowPaymentsService.createPayment(amount, currency, walletAddress);
 
       if (result.success) {
         res.json({
@@ -36,7 +36,8 @@ class PaymentController {
           paymentUrl: result.paymentUrl,
           payAddress: result.payAddress,
           payAmount: result.payAmount,
-          payCurrency: result.payCurrency
+          payCurrency: result.payCurrency,
+          walletAddress: result.walletAddress
         });
       } else {
         res.status(500).json({

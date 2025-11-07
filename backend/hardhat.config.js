@@ -12,14 +12,14 @@ const config = {
   networks: {}
 };
 
-if (process.env.SEPOLIA_RPC_URL && process.env.PRIVATE_KEY ) {
+if (process.env.SEPOLIA_RPC_URL && process.env.PRIVATE_KEY) {
   config.networks.sepolia = {
     url: process.env.SEPOLIA_RPC_URL,
     accounts: [process.env.PRIVATE_KEY]
   };
 }
 
-if (process.env.HOLESKY_RPC_URL && process.env.PRIVATE_KEY ) {
+if (process.env.HOLESKY_RPC_URL && process.env.PRIVATE_KEY) {
   config.networks.holesky = {
     url: process.env.HOLESKY_RPC_URL,
     accounts: [process.env.PRIVATE_KEY]
