@@ -4,6 +4,11 @@ require("@nomicfoundation/hardhat-chai-matchers");
 
 const config = {
   solidity: "0.8.28",
+  paths: {
+    sources: "../contracts",
+    artifacts: "../artifacts",
+    cache: "../cache"
+  },
   networks: {}
 };
 
