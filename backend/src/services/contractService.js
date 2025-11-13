@@ -8,7 +8,10 @@ async function initializeHardhat() {
     try {
         // Connect to Ganache network
         const provider = new ethers.JsonRpcProvider(process.env.GANACHE_URL || "http://127.0.0.1:7545");
-        const signer = new ethers.Wallet("0xe1f01a022f18a5697d602c62bf0ffcc237430ac229d9d84be7b3db139d55319a", provider);
+        const signer = new ethers.Wallet(process.env.GANACHE_PRIVATE_KEY, provider);
+
+         // const provider = new ethers.JsonRpcProvider(process.env.HOLESKY_RPC_URL);
+        // const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
         // Get the contract factory
         const TransferToken = await ethers.getContractFactory("TransferToken", signer);

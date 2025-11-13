@@ -4,6 +4,7 @@ require("@nomicfoundation/hardhat-chai-matchers");
 
 const config = {
   solidity: "0.8.28",
+  // defaultNetwork: "holesky",
   paths: {
     sources: "../contracts",
     artifacts: "../artifacts",
