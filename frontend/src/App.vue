@@ -1,4 +1,4 @@
-n<template>
+<template>
   <div id="app">
     <div class="container">
       <h1>MetaMask Token Transfer</h1>
@@ -14,6 +14,20 @@ n<template>
       <div v-if="connected" class="wallet-features">
         <p><strong>Connected Wallet:</strong> {{ walletAddress }}</p>
 
+        <!-- Network Selector -->
+        <div class="feature-section">
+          <h3>Select Network</h3>
+          <div class="form-group">
+            <label for="globalNetwork">Network:</label>
+            <select id="globalNetwork" v-model="selectedNetwork" @change="switchNetwork">
+              <option value="localhost">Ganache (Localhost)</option>
+              <option value="sepolia">Sepolia</option>
+              <option value="holesky">Holesky</option>
+            </select>
+          </div>
+          <p><strong>Current Network:</strong> {{ this.selectedNetwork || 'Not Connected' }}</p>
+        </div>
+
         <!-- Native Balance Section -->
         <div class="feature-section">
           <h3>Native Balance (ETH)</h3>
@@ -25,15 +39,7 @@ n<template>
 
         <!-- Transaction History Section -->
         <div class="feature-section">
-          <h3>Transaction History</h3>
-          <div class="form-group">
-            <label for="network">Network:</label>
-            <select id="network" v-model="selectedNetwork">
-              <option value="localhost">Localhost</option>
-              <option value="sepolia">Sepolia</option>
-              <option value="holesky">Holesky</option>
-            </select>
-          </div>
+          <h3>Transaction History ({{ selectedNetwork }})</h3>
           <button @click="fetchTransactions" :disabled="loading" class="action-btn">
             {{ loading ? 'Fetching...' : 'Fetch Transactions' }}
           </button>
@@ -98,14 +104,23 @@ n<template>
           </div>
 
           <button @click="fetchDeployedTokens" :disabled="loading" class="action-btn">
-            {{ loading ? 'Fetching...' : 'List All Deployed Tokens' }}
+            {{ loading ? 'Fetching...' : `List All Deployed Tokens on ${selectedNetwork}` }}
           </button>
         </div>
 
         <!-- Token Transfer Section -->
         <div class="feature-section">
           <h3>Transfer Tokens</h3>
-          <p class="info-text">Note: This transfers tokens from the contract owner to your wallet. Use this to get initial tokens for testing.</p>
+          <p class="info-text">Transfer tokens from contract owner to a specified address.</p>
+          <div class="form-group">
+            <label for="recipient">Recipient Address:</label>
+            <input
+              id="recipient"
+              v-model="recipient"
+              type="text"
+              placeholder="0x..."
+            >
+          </div>
           <div class="form-group">
             <label for="amount">Amount (Tokens):</label>
             <input
@@ -118,49 +133,39 @@ n<template>
           </div>
 
           <button @click="transferTokensToUser" :disabled="loading" class="transfer-btn">
-            {{ loading ? 'Transferring...' : 'Get Tokens' }}
+            {{ loading ? 'Transferring...' : 'Transfer Tokens' }}
           </button>
         </div>
 
-        <!-- NowPayments Payment Section -->
+        <!-- Send ETH Section -->
         <div class="feature-section">
-          <h3>NowPayments Crypto Payment</h3>
+          <h3>Send ETH ({{ selectedNetwork === 'localhost' ? 'Ganache' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1) }})</h3>
+          <p class="info-text">Send native Ethereum to another address on the {{ selectedNetwork === 'localhost' ? 'Ganache' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1) }} network.</p>
           <div class="form-group">
-            <label for="payAmount">Amount:</label>
+            <label for="ethRecipient">Recipient Address:</label>
             <input
-              id="payAmount"
-              v-model="payAmount"
+              id="ethRecipient"
+              v-model="ethRecipient"
+              type="text"
+              placeholder="0x..."
+            >
+          </div>
+          <div class="form-group">
+            <label for="ethAmount">Amount (ETH):</label>
+            <input
+              id="ethAmount"
+              v-model="ethAmount"
               type="number"
               step="0.0001"
               placeholder="0.01"
             >
           </div>
-          <div class="form-group">
-            <label for="payCurrency">Currency:</label>
-            <select id="payCurrency" v-model="payCurrency">
-              <option value="btc">BTC</option>
-              <option value="eth">ETH</option>
-              <option value="usdt">USDT</option>
-              <option value="usdc">USDC</option>
-            </select>
-          </div>
-          <button @click="createNowPayment" :disabled="loading" class="action-btn">
-            {{ loading ? 'Creating Payment...' : 'Create Payment' }}
+          <button @click="sendEth" :disabled="loading" class="action-btn">
+            {{ loading ? 'Sending...' : 'Send ETH' }}
           </button>
-          <!-- NowPayments Widget -->
-          <div class="nowpayments-widget">
-            <iframe
-              src="https://nowpayments.io/embeds/payment-widget?iid=5308158548"
-              width="410"
-              height="696"
-              frameborder="0"
-              scrolling="no"
-              style="overflow-y: hidden;"
-            >
-              Can't load widget
-            </iframe>
-          </div>
         </div>
+
+
       </div>
     </div>
   </div>
@@ -168,7 +173,6 @@ n<template>
 
 <script>
 import { ethers } from 'ethers'
-import axios from 'axios'
 
 export default {
   name: 'App',
@@ -178,8 +182,14 @@ export default {
       walletAddress: '',
       recipient: '0xc32CFEe0e3fd43a1dbE5001EB50c1413293a5D34',
       amount: '0.01',
+      ethRecipient: '',
+      ethAmount: '',
       loading: false,
       status: {
+        message: '',
+        type: 'info'
+      },
+      transferStatus: {
         message: '',
         type: 'info'
       },
@@ -193,9 +203,7 @@ export default {
       tokenName: '',
       tokenSymbol: '',
       tokenSupply: '',
-      deployedTokens: [],
-      payAmount: '',
-      payCurrency: 'btc'
+      deployedTokens: []
     }
   },
 
@@ -219,7 +227,13 @@ export default {
         const data = await response.json()
         if (response.ok) {
           this.contract = new ethers.Contract(data.address, data.abi, provider.getSigner())
-          this.currentNetwork = network.name
+          // Map chain ID to readable network name
+          const networkNames = {
+            1337: 'localhost',
+            11155111: 'sepolia',
+            17000: 'holesky'
+          }
+          this.currentNetwork = networkNames[chainId] || network.name
           return true
         } else {
           this.showStatus(`Failed to load contract: ${data.error}`, 'error')
@@ -261,7 +275,7 @@ export default {
     async fetchNativeBalance() {
       this.loading = true
       try {
-        const response = await fetch(`http://localhost:3005/api/native-balance/${this.walletAddress}`)
+        const response = await fetch(`http://localhost:3005/api/native-balance/${this.walletAddress}?network=${this.selectedNetwork}`)
         const data = await response.json()
         if (response.ok) {
           this.nativeBalance = data.balance
@@ -309,9 +323,9 @@ export default {
       this.loading = true
 
       try {
-        this.showStatus(`Deploying ${this.tokenName} token...`, 'info')
+        this.showStatus(`Deploying ${this.tokenName} token on ${this.selectedNetwork}...`, 'info')
 
-        const response = await fetch('http://localhost:3005/api/deploy-token', {
+        const response = await fetch(`http://localhost:3005/api/deploy-token?network=${this.selectedNetwork}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -377,15 +391,15 @@ export default {
       this.loading = true
 
       try {
-        this.showStatus(`Getting ${this.amount} tokens...`, 'info')
+        this.showStatus(`Getting ${this.amount} tokens on ${this.selectedNetwork}...`, 'info')
 
-        const response = await fetch('http://localhost:3005/api/transfer-to-user', {
+        const response = await fetch(`http://localhost:3005/api/transfer-to-user?network=${this.selectedNetwork}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            userAddress: this.walletAddress,
+            recipientAddress: this.recipient,
             amount: this.amount
           })
         })
@@ -406,7 +420,7 @@ export default {
     async fetchDeployedTokens() {
       this.loading = true
       try {
-        const response = await fetch('http://localhost:3005/api/deployed-tokens')
+        const response = await fetch(`http://localhost:3005/api/deployed-tokens?network=${this.selectedNetwork}`)
         const data = await response.json()
         if (response.ok) {
           this.deployedTokens = data.tokens
@@ -421,39 +435,78 @@ export default {
       }
     },
 
-    async createNowPayment() {
-      if (!this.payAmount || parseFloat(this.payAmount) <= 0) {
-        this.showStatus('Please enter a valid amount.', 'error')
+
+
+    async sendEth() {
+      if (!this.ethRecipient || !this.ethAmount) {
+        this.showStatus('Please enter recipient address and amount.', 'error')
         return
       }
 
-      if (!this.walletAddress) {
-        this.showStatus('Please connect your MetaMask wallet first.', 'error')
+      const amountNum = parseFloat(this.ethAmount)
+      if (isNaN(amountNum) || amountNum <= 0) {
+        this.showStatus('Amount must be a positive number.', 'error')
         return
       }
 
       this.loading = true
 
       try {
-        this.showStatus('Creating payment...', 'info')
+        this.showStatus('Sending ETH...', 'info')
 
-        const response = await axios.post('http://localhost:3005/api/nowpayments/create-payment', {
-          amount: this.payAmount,
-          currency: this.payCurrency,
-          walletAddress: this.walletAddress
+        const response = await fetch(`http://localhost:3005/api/eth-transfer/send?network=${this.selectedNetwork}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            recipient: this.ethRecipient,
+            amount: this.ethAmount
+          })
         })
 
-        if (response.status === 200) {
-          this.showStatus('Payment created successfully!', 'success')
-          // Open the payment URL in a new tab
-          window.open(response.data.paymentUrl, '_blank')
+        const data = await response.json()
+        if (response.ok) {
+          this.showStatus(`ETH sent successfully! Tx: ${data.transactionHash}`, 'success')
         } else {
-          this.showStatus(`Failed to create payment: ${response.data.error}`, 'error')
+          this.showStatus(`Failed to send ETH: ${data.error}`, 'error')
         }
       } catch (error) {
-        this.showStatus(`Error creating payment: ${error.message}`, 'error')
+        this.showStatus(`Error sending ETH: ${error.message}`, 'error')
       } finally {
         this.loading = false
+      }
+    },
+
+    async switchNetwork() {
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          let chainId
+          if (this.selectedNetwork === 'localhost') {
+            chainId = '0x539' // Ganache default
+          } else if (this.selectedNetwork === 'sepolia') {
+            chainId = '0xaa36a7' // Sepolia
+          } else if (this.selectedNetwork === 'holesky') {
+            chainId = '0x4268' // Holesky
+          }
+
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId }],
+          })
+
+          // Reload contract for new network
+          await this.loadContract()
+
+          // Automatically fetch balance for the new network
+          await this.fetchNativeBalance()
+
+          this.showStatus(`Switched to ${this.selectedNetwork} network`, 'success')
+        } catch (error) {
+          this.showStatus(`Error switching network: ${error.message}`, 'error')
+        }
+      } else {
+        this.showStatus('MetaMask not detected.', 'error')
       }
     }
 

@@ -3,9 +3,20 @@ const { ethers } = require('hardhat');
 // Get native balance (ETH)
 const getNativeBalance = async (req, res) => {
     try {
-        console.log(`Fetching native balance for address: ${req.params.address}`);
-        // Connect to Ganache provider
-        const provider = new ethers.JsonRpcProvider(process.env.GANACHE_URL || "http://127.0.0.1:7545");
+        const network = req.query.network || 'localhost';
+        console.log(`Fetching native balance for address: ${req.params.address} on ${network}`);
+
+        let provider;
+        if (network === 'localhost') {
+            provider = new ethers.JsonRpcProvider(process.env.GANACHE_URL || "http://127.0.0.1:7545");
+        } else if (network === 'sepolia') {
+            provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+        } else if (network === 'holesky') {
+            provider = new ethers.JsonRpcProvider(process.env.HOLESKY_RPC_URL);
+        } else {
+            return res.status(400).json({ error: 'Unsupported network' });
+        }
+
         const balance = await provider.getBalance(req.params.address);
         console.log(`Native balance: ${ethers.formatEther(balance)} ETH`);
         res.json({ balance: ethers.formatEther(balance) });

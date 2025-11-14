@@ -1,24 +1,25 @@
 const { ethers } = require('hardhat');
-const { getContractInstance, getContractAddress, getDeployedTokens, addDeployedToken } = require('../services/contractService');
+const { getContractInstance, getContractAddress, getDeployedTokens, addDeployedToken, getProviderAndSigner, deployContractForNetwork } = require('../services/contractService');
 
 // Deploy a new ERC20 token
 const deployToken = async (req, res) => {
     try {
         const { name, symbol, initialSupply } = req.body;
+        const network = req.query.network || 'localhost';
 
         if (!name || !symbol || !initialSupply) {
             return res.status(400).json({ error: 'Name, symbol, and initialSupply are required' });
         }
 
-        // Create a new contract factory for a generic ERC20
-        const GenericERC20 = await ethers.getContractFactory("TransferToken");
+        const { signer } = await getProviderAndSigner(network);
+        const GenericERC20 = await ethers.getContractFactory("TransferToken", signer);
 
-        console.log(`Deploying ${name} (${symbol}) with supply ${initialSupply}...`);
+        console.log(`Deploying ${name} (${symbol}) with supply ${initialSupply} on ${network}...`);
         const token = await GenericERC20.deploy(ethers.parseEther(initialSupply.toString()));
         await token.waitForDeployment();
         const deployedAddress = await token.getAddress();
 
-        console.log(`${name} deployed to:`, deployedAddress);
+        console.log(`${name} deployed on ${network} to:`, deployedAddress);
 
         const tokenData = {
             success: true,
@@ -26,11 +27,12 @@ const deployToken = async (req, res) => {
             name,
             symbol,
             initialSupply,
+            network,
             abi: require('../../../artifacts/contracts/TransferToken.sol/TransferToken.json').abi
         };
 
         // Store deployed token
-        addDeployedToken(tokenData);
+        addDeployedToken(network, tokenData);
 
         res.json(tokenData);
     } catch (error) {
@@ -40,23 +42,48 @@ const deployToken = async (req, res) => {
 
 // Get list of deployed tokens
 const getDeployedTokensList = (req, res) => {
-    res.json({ tokens: getDeployedTokens() });
+    const network = req.query.network || 'localhost';
+    res.json({ tokens: getDeployedTokens(network) });
+};
+
+// Map chain IDs to network names
+const chainIdToNetwork = {
+    '1337': 'localhost',      // Ganache default
+    '11155111': 'sepolia',    // Sepolia
+    '17000': 'holesky'        // Holesky
 };
 
 // Get contract information
-const getContractInfo = (req, res) => {
-    const address = getContractAddress();
-    if (!address) {
-        return res.status(500).json({ error: 'Contract not deployed yet' });
-    }
+const getContractInfo = async (req, res) => {
+    try {
+        let network = req.query.network || 'localhost';
 
-    // For now, return the same contract for all networks
-    // In production, you might have different contracts per network
-    res.json({
-        address,
-        abi: require('../../../artifacts/contracts/TransferToken.sol/TransferToken.json').abi,
-        network: req.query.network || 'unknown'
-    });
+        // If network is a chain ID, map it to network name
+        if (chainIdToNetwork[network]) {
+            network = chainIdToNetwork[network];
+        }
+
+        let address = getContractAddress(network);
+
+        // If contract not deployed on this network, deploy it
+        if (!address) {
+            console.log(`Contract not found on ${network}, deploying...`);
+            const result = await deployContractForNetwork(network);
+            if (result) {
+                address = result.address;
+            } else {
+                return res.status(500).json({ error: 'Failed to deploy contract on this network' });
+            }
+        }
+
+        res.json({
+            address,
+            abi: require('../../../artifacts/contracts/TransferToken.sol/TransferToken.json').abi,
+            network
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 };
 
 // Get token balance
@@ -92,19 +119,20 @@ const getContractOwner = async (req, res) => {
 // Transfer tokens from owner to user (for initial token distribution)
 const transferToUser = async (req, res) => {
     try {
-        const { userAddress, amount } = req.body;
+        const { recipientAddress, amount } = req.body;
+        const network = req.query.network || 'localhost';
 
-        if (!userAddress || !amount) {
-            return res.status(400).json({ error: 'User address and amount are required' });
+        if (!recipientAddress || !amount) {
+            return res.status(400).json({ error: 'Recipient address and amount are required' });
         }
 
-        const contract = getContractInstance();
+        const contract = await getContractInstance(network);
         if (!contract) {
             return res.status(500).json({ error: 'Contract not initialized' });
         }
 
         // Transfer tokens from owner to user
-        const tx = await contract.secureTransfer(userAddress, ethers.parseEther(amount.toString()));
+        const tx = await contract.secureTransfer(recipientAddress, ethers.parseEther(amount.toString()));
         await tx.wait();
 
         res.json({
