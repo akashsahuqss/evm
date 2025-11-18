@@ -6,8 +6,8 @@ const app = express();
 const PORT = process.env.PORT || 3005;
 
 // Import routes
-const paymentRoutes = require('./src/routes/paymentRoutes');
 const contractRoutes = require('./src/routes/contractRoutes');
+const ethTransferRoutes = require('./src/routes/ethTransferRoutes');
 
 // Import services
 const { initializeHardhat } = require('./src/services/contractService');
@@ -27,7 +27,7 @@ initializeHardhat().then((result) => {
 
 // API Routes
 app.use('/api', contractRoutes);
-app.use('/api/nowpayments', paymentRoutes);
+app.use('/api/eth-transfer', ethTransferRoutes);
 
 // Serve static files (for the HTML UI and Vue frontend)
 app.use(express.static('.'));
