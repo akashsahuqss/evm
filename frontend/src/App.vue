@@ -466,7 +466,7 @@ export default {
         })
 
         const data = await response.json()
-        if (response.ok) {
+        if (response.ok && data.success) {
           this.showStatus(`ETH sent successfully! Tx: ${data.transactionHash}`, 'success')
         } else {
           this.showStatus(`Failed to send ETH: ${data.error}`, 'error')
