@@ -37,14 +37,13 @@ async function sendEther(recipient, amountInEther, network = 'localhost') {
             throw new Error('Invalid recipient address');
         }
 
-        const amountInWei = ethers.parseEther(amountInEther.toString());
-        if (amountInWei <= 0n) {
-            throw new Error('Amount must be positive');
-        }
 
         // Check sender balance
         const balance = await provider.getBalance(signer.address);
-        if (balance < amountInWei) {
+        const balanceInEth = parseFloat(ethers.utils.formatEther(balance))
+        console.log("sender balance:", balanceInEth, "ETH");
+        console.log("amountInEther:", amountInEther, "ETH");
+        if (balanceInEth < parseFloat(amountInEther)) {
             throw new Error('Insufficient balance');
         }
 
@@ -52,7 +51,7 @@ async function sendEther(recipient, amountInEther, network = 'localhost') {
         console.log(`Sending ${amountInEther} ETH to ${recipient} on ${network}...`);
         const tx = await signer.sendTransaction({
             to: recipient,
-            value: amountInWei
+            value: ethers.utils.parseEther(amountInEther.toString())
         });
 
         // Wait for confirmation
