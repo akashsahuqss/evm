@@ -165,6 +165,10 @@
           </button>
         </div>
 
+        <!-- CoinGate Payment Section -->
+        <div class="feature-section">
+          <CoinGatePayment />
+        </div>
 
       </div>
     </div>
@@ -173,9 +177,13 @@
 
 <script>
 import { ethers } from 'ethers'
+import CoinGatePayment from './components/CoinGatePayment.vue'
 
 export default {
   name: 'App',
+  components: {
+    CoinGatePayment
+  },
   data() {
     return {
       connected: false,
